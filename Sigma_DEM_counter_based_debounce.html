@@ -1,0 +1,182 @@
+
+<style>
+  .dem-btn { padding: 8px 20px; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-secondary); background: transparent; color: var(--color-text-primary); font-size: 13px; cursor: pointer; transition: background 0.15s; }
+  .dem-btn:hover { background: var(--color-background-secondary); }
+  .dem-btn.failed { border-color: #A32D2D; color: #A32D2D; }
+  .dem-btn.failed:hover { background: #FCEBEB; }
+  .dem-btn.passed { border-color: #0F6E56; color: #0F6E56; }
+  .dem-btn.passed:hover { background: #E1F5EE; }
+  .dem-btn.reset  { border-color: var(--color-border-secondary); }
+  .state-pill { display:inline-block; padding: 4px 14px; border-radius: 999px; font-size: 12px; font-weight: 500; }
+</style>
+
+<h2 class="sr-only">DEM counter-based debounce algorithm interactive simulator</h2>
+
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:1.5rem;">
+  <div style="background:var(--color-background-secondary); border-radius:var(--border-radius-md); padding:1rem;">
+    <div style="font-size:12px; color:var(--color-text-secondary); margin-bottom:4px;">DemDebounceCounterIncrementStepSize</div>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <input type="range" min="1" max="5" value="2" id="incStep" style="flex:1;" oninput="document.getElementById('incOut').textContent=this.value; reset()">
+      <span style="font-size:14px; font-weight:500; min-width:16px;" id="incOut">2</span>
+    </div>
+  </div>
+  <div style="background:var(--color-background-secondary); border-radius:var(--border-radius-md); padding:1rem;">
+    <div style="font-size:12px; color:var(--color-text-secondary); margin-bottom:4px;">DemDebounceCounterDecrementStepSize</div>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <input type="range" min="1" max="5" value="1" id="decStep" style="flex:1;" oninput="document.getElementById('decOut').textContent=this.value; reset()">
+      <span style="font-size:14px; font-weight:500; min-width:16px;" id="decOut">1</span>
+    </div>
+  </div>
+</div>
+
+<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:1.5rem;">
+  <div style="background:var(--color-background-secondary); border-radius:var(--border-radius-md); padding:1rem; text-align:center;">
+    <div style="font-size:12px; color:var(--color-text-secondary); margin-bottom:4px;">Counter value</div>
+    <div style="font-size:28px; font-weight:500;" id="counterVal">0</div>
+    <div style="font-size:11px; color:var(--color-text-tertiary);">range: -127 … +127</div>
+  </div>
+  <div style="background:var(--color-background-secondary); border-radius:var(--border-radius-md); padding:1rem; text-align:center;">
+    <div style="font-size:12px; color:var(--color-text-secondary); margin-bottom:4px;">Event status</div>
+    <div id="eventStatus" style="margin-top:6px;"><span class="state-pill" style="background:#E6F1FB; color:#0C447C;">PREPASSED</span></div>
+  </div>
+  <div style="background:var(--color-background-secondary); border-radius:var(--border-radius-md); padding:1rem; text-align:center;">
+    <div style="font-size:12px; color:var(--color-text-secondary); margin-bottom:4px;">DTC status</div>
+    <div id="dtcStatus" style="margin-top:6px;"><span class="state-pill" style="background:#F1EFE8; color:#5F5E5A;">No DTC stored</span></div>
+  </div>
+</div>
+
+<div style="margin-bottom:1.5rem;">
+  <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--color-text-secondary); margin-bottom:6px;">
+    <span>PASSED threshold: -127</span>
+    <span>FAILED threshold: +127</span>
+  </div>
+  <div style="position:relative; height:28px; background:var(--color-background-secondary); border-radius:var(--border-radius-md); border:0.5px solid var(--color-border-tertiary); overflow:hidden;">
+    <div id="counterBar" style="position:absolute; top:0; height:100%; width:50%; left:50%; background:#E6F1FB; border-radius:0; transition:all 0.2s;"></div>
+    <div style="position:absolute; left:50%; top:0; height:100%; width:1px; background:var(--color-border-secondary);"></div>
+    <div id="counterBarLabel" style="position:absolute; width:100%; text-align:center; top:50%; transform:translateY(-50%); font-size:12px; color:var(--color-text-secondary); pointer-events:none;">0</div>
+  </div>
+  <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--color-text-tertiary); margin-top:4px;">
+    <span>-127</span><span>-64</span><span>0</span><span>+64</span><span>+127</span>
+  </div>
+</div>
+
+<div style="display:flex; gap:10px; margin-bottom:1.5rem; flex-wrap:wrap;">
+  <button class="dem-btn failed" onclick="step('FAILED')">Dem_SetEventStatus FAILED (+step)</button>
+  <button class="dem-btn passed" onclick="step('PASSED')">Dem_SetEventStatus PASSED (-step)</button>
+  <button class="dem-btn reset"  onclick="reset()">Reset counter</button>
+</div>
+
+<div style="border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-lg); overflow:hidden; margin-bottom:1.5rem;">
+  <div style="background:var(--color-background-secondary); padding:8px 14px; font-size:12px; font-weight:500; color:var(--color-text-secondary); border-bottom:0.5px solid var(--color-border-tertiary);">Event log</div>
+  <div id="logBox" style="padding:10px 14px; font-size:12px; font-family:var(--font-mono); color:var(--color-text-secondary); max-height:140px; overflow-y:auto; display:flex; flex-direction:column; gap:4px;">
+    <span style="color:var(--color-text-tertiary);">— press a button to simulate —</span>
+  </div>
+</div>
+
+<div style="background:var(--color-background-secondary); border-radius:var(--border-radius-lg); padding:1rem 1.25rem;">
+  <div style="font-size:12px; font-weight:500; color:var(--color-text-secondary); margin-bottom:10px;">Algorithm rules (AUTOSAR SWS_Dem)</div>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:12px; color:var(--color-text-secondary);">
+    <div style="padding:8px; border-radius:var(--border-radius-md); border:0.5px solid #A32D2D; background:#FCEBEB; color:#791F1F;">FAILED call → counter += IncrementStep<br>counter clamped at +127 → DEM_EVENT_STATUS_PREFAILED<br>counter = +127 → <strong>DEM_EVENT_STATUS_FAILED</strong> → DTC stored</div>
+    <div style="padding:8px; border-radius:var(--border-radius-md); border:0.5px solid #0F6E56; background:#E1F5EE; color:#085041;">PASSED call → counter -= DecrementStep<br>counter clamped at -127 → DEM_EVENT_STATUS_PREPASSED<br>counter = -127 → <strong>DEM_EVENT_STATUS_PASSED</strong> → DTC healed</div>
+  </div>
+</div>
+
+<script>
+  var counter = 0;
+  var MAX = 127;
+
+  function getInc() { return parseInt(document.getElementById('incStep').value); }
+  function getDec() { return parseInt(document.getElementById('decStep').value); }
+
+  function reset() {
+    counter = 0;
+    updateUI('—', null);
+    document.getElementById('logBox').innerHTML = '<span style="color:var(--color-text-tertiary);">— counter reset —</span>';
+  }
+
+  function step(type) {
+    var prev = counter;
+    if (type === 'FAILED') {
+      counter = Math.min(MAX, counter + getInc());
+    } else {
+      counter = Math.max(-MAX, counter - getDec());
+    }
+
+    var status, dtc, logColor;
+    if (counter >= MAX) {
+      status = 'FAILED';
+      dtc = 'DTC stored';
+      logColor = '#A32D2D';
+    } else if (counter <= -MAX) {
+      status = 'PASSED';
+      dtc = 'DTC healed / cleared';
+      logColor = '#0F6E56';
+    } else if (counter > 0) {
+      status = 'PREFAILED';
+      dtc = 'No DTC yet';
+      logColor = '#854F0B';
+    } else if (counter < 0) {
+      status = 'PREPASSED';
+      dtc = 'No DTC yet';
+      logColor = '#185FA5';
+    } else {
+      status = 'INIT';
+      dtc = 'No DTC';
+      logColor = '#5F5E5A';
+    }
+
+    updateUI(status, dtc);
+    addLog(type, prev, counter, status, logColor);
+  }
+
+  function updateUI(status, dtc) {
+    var c = counter;
+    document.getElementById('counterVal').textContent = c;
+    document.getElementById('counterBarLabel').textContent = c;
+
+    var pct = (c / MAX) * 50;
+    var bar = document.getElementById('counterBar');
+    if (c >= 0) {
+      bar.style.left  = '50%';
+      bar.style.width = pct + '%';
+      bar.style.background = c >= MAX ? '#F09595' : (c > 0 ? '#FAC775' : '#E6F1FB');
+    } else {
+      var w = Math.abs(pct);
+      bar.style.left  = (50 - w) + '%';
+      bar.style.width = w + '%';
+      bar.style.background = c <= -MAX ? '#9FE1CB' : '#B5D4F4';
+    }
+
+    var pillMap = {
+      'FAILED':   ['#FCEBEB','#791F1F'],
+      'PREFAILED':['#FAEEDA','#633806'],
+      'PREPASSED':['#E6F1FB','#0C447C'],
+      'PASSED':   ['#E1F5EE','#085041'],
+      'INIT':     ['#F1EFE8','#5F5E5A'],
+      '—':        ['#F1EFE8','#5F5E5A']
+    };
+    var cols = pillMap[status] || pillMap['—'];
+    document.getElementById('eventStatus').innerHTML =
+      '<span class="state-pill" style="background:'+cols[0]+'; color:'+cols[1]+';">'+status+'</span>';
+
+    if (dtc) {
+      var isDtc = dtc.indexOf('stored') >= 0;
+      var isHeal = dtc.indexOf('healed') >= 0;
+      var bg = isDtc ? '#FCEBEB' : (isHeal ? '#E1F5EE' : '#F1EFE8');
+      var fg = isDtc ? '#791F1F' : (isHeal ? '#085041' : '#5F5E5A');
+      document.getElementById('dtcStatus').innerHTML =
+        '<span class="state-pill" style="background:'+bg+'; color:'+fg+';">'+dtc+'</span>';
+    }
+  }
+
+  function addLog(type, prev, curr, status, color) {
+    var box = document.getElementById('logBox');
+    var arrow = type === 'FAILED' ? '▲' : '▼';
+    var step = type === 'FAILED' ? '+'+getInc() : '-'+getDec();
+    var line = document.createElement('span');
+    line.style.color = color;
+    line.textContent = arrow + ' ' + type + '  ' + prev + ' → ' + curr + '  [' + status + ']  (step ' + step + ')';
+    box.insertBefore(line, box.firstChild);
+    if (box.children.length > 20) box.removeChild(box.lastChild);
+  }
+</script>

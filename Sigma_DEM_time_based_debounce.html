@@ -1,0 +1,232 @@
+
+<style>
+  .dem-btn { padding: 8px 18px; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-secondary); background: transparent; color: var(--color-text-primary); font-size: 13px; cursor: pointer; transition: background 0.15s; user-select:none; }
+  .dem-btn:hover { background: var(--color-background-secondary); }
+  .dem-btn.failed { border-color:#A32D2D; color:#A32D2D; }
+  .dem-btn.failed:hover { background:#FCEBEB; }
+  .dem-btn.passed { border-color:#0F6E56; color:#0F6E56; }
+  .dem-btn.passed:hover { background:#E1F5EE; }
+  .dem-btn:active { transform:scale(0.97); }
+  .state-pill { display:inline-block; padding:4px 14px; border-radius:999px; font-size:12px; font-weight:500; }
+  .timer-bar-wrap { position:relative; height:22px; background:var(--color-background-secondary); border-radius:var(--border-radius-md); border:0.5px solid var(--color-border-tertiary); overflow:hidden; margin-top:4px; }
+  .timer-bar-fill { position:absolute; top:0; left:0; height:100%; width:0%; transition:width 0.1s linear; }
+  .timer-bar-label { position:absolute; width:100%; text-align:center; top:50%; transform:translateY(-50%); font-size:11px; pointer-events:none; }
+</style>
+
+<h2 class="sr-only">DEM time-based debounce algorithm interactive simulator</h2>
+
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:1.5rem;">
+  <div style="background:var(--color-background-secondary); border-radius:var(--border-radius-md); padding:1rem;">
+    <div style="font-size:12px; color:var(--color-text-secondary); margin-bottom:4px;">DemDebounceTimeFailedThreshold (ms)</div>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <input type="range" min="500" max="5000" step="500" value="2000" id="failThresh" style="flex:1;" oninput="document.getElementById('failOut').textContent=this.value; softReset()">
+      <span style="font-size:14px; font-weight:500; min-width:40px;" id="failOut">2000</span>
+    </div>
+  </div>
+  <div style="background:var(--color-background-secondary); border-radius:var(--border-radius-md); padding:1rem;">
+    <div style="font-size:12px; color:var(--color-text-secondary); margin-bottom:4px;">DemDebounceTimePassedThreshold (ms)</div>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <input type="range" min="500" max="5000" step="500" value="1000" id="passThresh" style="flex:1;" oninput="document.getElementById('passOut').textContent=this.value; softReset()">
+      <span style="font-size:14px; font-weight:500; min-width:40px;" id="passOut">1000</span>
+    </div>
+  </div>
+</div>
+
+<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:1.5rem;">
+  <div style="background:var(--color-background-secondary); border-radius:var(--border-radius-md); padding:1rem; text-align:center;">
+    <div style="font-size:12px; color:var(--color-text-secondary); margin-bottom:4px;">Active timer</div>
+    <div style="font-size:24px; font-weight:500;" id="timerDisplay">—</div>
+    <div style="font-size:11px; color:var(--color-text-tertiary);" id="timerLabel">no timer running</div>
+  </div>
+  <div style="background:var(--color-background-secondary); border-radius:var(--border-radius-md); padding:1rem; text-align:center;">
+    <div style="font-size:12px; color:var(--color-text-secondary); margin-bottom:4px;">Event status</div>
+    <div id="eventStatus" style="margin-top:6px;"><span class="state-pill" style="background:#F1EFE8;color:#5F5E5A;">INIT</span></div>
+  </div>
+  <div style="background:var(--color-background-secondary); border-radius:var(--border-radius-md); padding:1rem; text-align:center;">
+    <div style="font-size:12px; color:var(--color-text-secondary); margin-bottom:4px;">DTC status</div>
+    <div id="dtcStatus" style="margin-top:6px;"><span class="state-pill" style="background:#F1EFE8;color:#5F5E5A;">No DTC stored</span></div>
+  </div>
+</div>
+
+<div style="margin-bottom:1.5rem;">
+  <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--color-text-secondary); margin-bottom:2px;">
+    <span>FAILED timer</span>
+    <span id="failTimerPct">0 ms / 2000 ms</span>
+  </div>
+  <div class="timer-bar-wrap">
+    <div id="failBar" class="timer-bar-fill" style="background:#F09595;"></div>
+    <div class="timer-bar-label" id="failBarLabel" style="color:#A32D2D;">0 ms</div>
+  </div>
+
+  <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--color-text-secondary); margin-top:10px; margin-bottom:2px;">
+    <span>PASSED timer</span>
+    <span id="passTimerPct">0 ms / 1000 ms</span>
+  </div>
+  <div class="timer-bar-wrap">
+    <div id="passBar" class="timer-bar-fill" style="background:#9FE1CB;"></div>
+    <div class="timer-bar-label" id="passBarLabel" style="color:#0F6E56;">0 ms</div>
+  </div>
+</div>
+
+<div style="display:flex; gap:10px; margin-bottom:1.5rem; flex-wrap:wrap; align-items:center;">
+  <button class="dem-btn failed" id="btnFailed" onmousedown="startSignal('FAILED')" onmouseup="stopSignal()" onmouseleave="stopSignal()" ontouchstart="startSignal('FAILED')" ontouchend="stopSignal()">Hold — FAILED signal</button>
+  <button class="dem-btn passed" id="btnPassed" onmousedown="startSignal('PASSED')" onmouseup="stopSignal()" onmouseleave="stopSignal()" ontouchstart="startSignal('PASSED')" ontouchend="stopSignal()">Hold — PASSED signal</button>
+  <button class="dem-btn" onclick="fullReset()" style="margin-left:auto;">Reset</button>
+</div>
+
+<div style="border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-lg); overflow:hidden; margin-bottom:1.5rem;">
+  <div style="background:var(--color-background-secondary); padding:8px 14px; font-size:12px; font-weight:500; color:var(--color-text-secondary); border-bottom:0.5px solid var(--color-border-tertiary);">Event log</div>
+  <div id="logBox" style="padding:10px 14px; font-size:12px; font-family:var(--font-mono); color:var(--color-text-secondary); max-height:120px; overflow-y:auto; display:flex; flex-direction:column; gap:3px;">
+    <span style="color:var(--color-text-tertiary);">— hold a button to run the timer —</span>
+  </div>
+</div>
+
+<div style="background:var(--color-background-secondary); border-radius:var(--border-radius-lg); padding:1rem 1.25rem;">
+  <div style="font-size:12px; font-weight:500; color:var(--color-text-secondary); margin-bottom:10px;">Algorithm rules (AUTOSAR SWS_Dem — DemDebounceTimeBased)</div>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:12px;">
+    <div style="padding:8px; border-radius:var(--border-radius-md); border:0.5px solid #A32D2D; background:#FCEBEB; color:#791F1F;">
+      FAILED signal held continuously →<br>
+      FAILED timer runs up to threshold<br>
+      Timer reaches threshold → <strong>PREFAILED → FAILED</strong><br>
+      Signal drops → timer resets to 0
+    </div>
+    <div style="padding:8px; border-radius:var(--border-radius-md); border:0.5px solid #0F6E56; background:#E1F5EE; color:#085041;">
+      PASSED signal held continuously →<br>
+      PASSED timer runs up to threshold<br>
+      Timer reaches threshold → <strong>PREPASSED → PASSED</strong><br>
+      Signal drops → timer resets to 0
+    </div>
+  </div>
+</div>
+
+<script>
+  var failTimer = 0, passTimer = 0;
+  var activeSignal = null;
+  var rafId = null;
+  var lastTs = null;
+  var currentStatus = 'INIT';
+  var dtcStored = false;
+
+  function getFailThresh() { return parseInt(document.getElementById('failThresh').value); }
+  function getPassThresh() { return parseInt(document.getElementById('passThresh').value); }
+
+  function startSignal(type) {
+    if (activeSignal === type) return;
+    stopSignal();
+    activeSignal = type;
+    lastTs = performance.now();
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function stopSignal() {
+    if (!activeSignal) return;
+    addLog('signal released — ' + activeSignal + ' timer reset to 0');
+    activeSignal = null;
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    failTimer = 0; passTimer = 0;
+    updateBars();
+    updateTimerDisplay('—', 'no timer running');
+  }
+
+  function tick(ts) {
+    var dt = ts - lastTs;
+    lastTs = ts;
+    var ft = getFailThresh(), pt = getPassThresh();
+
+    if (activeSignal === 'FAILED') {
+      failTimer = Math.min(ft, failTimer + dt);
+      passTimer = 0;
+      updateTimerDisplay(Math.round(failTimer) + ' ms', 'FAILED timer running');
+      if (failTimer >= ft) {
+        if (currentStatus !== 'FAILED') { setStatus('FAILED'); addLog('FAILED threshold reached → DTC stored'); }
+      } else {
+        if (currentStatus !== 'PREFAILED') setStatus('PREFAILED');
+      }
+    } else if (activeSignal === 'PASSED') {
+      passTimer = Math.min(pt, passTimer + dt);
+      failTimer = 0;
+      updateTimerDisplay(Math.round(passTimer) + ' ms', 'PASSED timer running');
+      if (passTimer >= pt) {
+        if (currentStatus !== 'PASSED') { setStatus('PASSED'); addLog('PASSED threshold reached → DTC healed'); }
+      } else {
+        if (currentStatus !== 'PREPASSED') setStatus('PREPASSED');
+      }
+    }
+
+    updateBars();
+    if (activeSignal) rafId = requestAnimationFrame(tick);
+  }
+
+  function updateBars() {
+    var ft = getFailThresh(), pt = getPassThresh();
+    var fp = Math.min(100, (failTimer / ft) * 100);
+    var pp = Math.min(100, (passTimer / pt) * 100);
+    document.getElementById('failBar').style.width = fp + '%';
+    document.getElementById('passBar').style.width = pp + '%';
+    document.getElementById('failBarLabel').textContent = Math.round(failTimer) + ' ms';
+    document.getElementById('passBarLabel').textContent = Math.round(passTimer) + ' ms';
+    document.getElementById('failTimerPct').textContent = Math.round(failTimer) + ' ms / ' + ft + ' ms';
+    document.getElementById('passTimerPct').textContent = Math.round(passTimer) + ' ms / ' + pt + ' ms';
+  }
+
+  function updateTimerDisplay(val, label) {
+    document.getElementById('timerDisplay').textContent = val;
+    document.getElementById('timerLabel').textContent = label;
+  }
+
+  function setStatus(s) {
+    currentStatus = s;
+    var map = {
+      'FAILED':   ['#FCEBEB','#791F1F'],
+      'PREFAILED':['#FAEEDA','#633806'],
+      'PREPASSED':['#E6F1FB','#0C447C'],
+      'PASSED':   ['#E1F5EE','#085041'],
+      'INIT':     ['#F1EFE8','#5F5E5A']
+    };
+    var c = map[s] || map['INIT'];
+    document.getElementById('eventStatus').innerHTML =
+      '<span class="state-pill" style="background:'+c[0]+';color:'+c[1]+';">'+s+'</span>';
+
+    if (s === 'FAILED') {
+      dtcStored = true;
+      document.getElementById('dtcStatus').innerHTML =
+        '<span class="state-pill" style="background:#FCEBEB;color:#791F1F;">DTC stored</span>';
+    } else if (s === 'PASSED') {
+      dtcStored = false;
+      document.getElementById('dtcStatus').innerHTML =
+        '<span class="state-pill" style="background:#E1F5EE;color:#085041;">DTC healed</span>';
+    } else if (!dtcStored) {
+      document.getElementById('dtcStatus').innerHTML =
+        '<span class="state-pill" style="background:#F1EFE8;color:#5F5E5A;">No DTC stored</span>';
+    }
+  }
+
+  function addLog(msg) {
+    var box = document.getElementById('logBox');
+    var el = document.createElement('span');
+    var t = new Date();
+    var ts = t.getSeconds().toString().padStart(2,'0') + '.' + Math.floor(t.getMilliseconds()/100);
+    el.textContent = '[' + ts + '] ' + msg;
+    el.style.color = msg.indexOf('FAILED') >= 0 && msg.indexOf('healed') < 0 ? '#A32D2D' :
+                     msg.indexOf('PASSED') >= 0 || msg.indexOf('healed') >= 0 ? '#0F6E56' :
+                     'var(--color-text-tertiary)';
+    box.insertBefore(el, box.firstChild);
+    if (box.children.length > 30) box.removeChild(box.lastChild);
+  }
+
+  function softReset() {
+    stopSignal();
+    failTimer = 0; passTimer = 0;
+    updateBars();
+    document.getElementById('failOut').textContent = document.getElementById('failThresh').value;
+    document.getElementById('passOut').textContent = document.getElementById('passThresh').value;
+  }
+
+  function fullReset() {
+    softReset();
+    dtcStored = false;
+    setStatus('INIT');
+    updateTimerDisplay('—', 'no timer running');
+    document.getElementById('logBox').innerHTML = '<span style="color:var(--color-text-tertiary);">— reset —</span>';
+  }
+</script>

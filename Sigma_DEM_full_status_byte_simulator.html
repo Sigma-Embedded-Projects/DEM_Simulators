@@ -1,0 +1,212 @@
+
+<style>
+  .dem-btn{padding:7px 14px;border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-secondary);background:transparent;color:var(--color-text-primary);font-size:12px;cursor:pointer;transition:background 0.15s;}
+  .dem-btn:hover{background:var(--color-background-secondary);}
+  .dem-btn.fail{border-color:#A32D2D;color:#A32D2D;}
+  .dem-btn.fail:hover{background:#FCEBEB;}
+  .dem-btn.pass{border-color:#0F6E56;color:#0F6E56;}
+  .dem-btn.pass:hover{background:#E1F5EE;}
+  .dem-btn.clear{border-color:#185FA5;color:#185FA5;}
+  .dem-btn.clear:hover{background:#E6F1FB;}
+  .dem-btn.dcy{border-color:#854F0B;color:#854F0B;}
+  .dem-btn.dcy:hover{background:#FAEEDA;}
+  .bit-cell{display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 4px;border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-tertiary);background:var(--color-background-secondary);}
+  .bit-val{font-size:20px;font-weight:500;line-height:1;}
+  .bit-name{font-size:9px;color:var(--color-text-tertiary);text-align:center;line-height:1.3;}
+</style>
+
+<h2 class="sr-only">DEM full 8-bit DTC status byte simulator with DemEventConfirmationThreshold=3</h2>
+
+<div style="display:grid;grid-template-columns:repeat(8,1fr);gap:6px;margin-bottom:1rem;" id="bitGrid"></div>
+
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:8px 14px;">
+  <span style="font-size:11px;color:var(--color-text-tertiary);">Status byte (hex)</span>
+  <span style="font-size:20px;font-weight:500;font-family:var(--font-mono);" id="hexByte">0x00</span>
+  <span style="font-size:11px;color:var(--color-text-tertiary);margin-left:16px;">Fault DCY counter</span>
+  <span style="font-size:16px;font-weight:500;" id="dcyCounter">0 / 3</span>
+  <div style="display:flex;gap:5px;margin-left:4px;" id="dcyDots"></div>
+</div>
+
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1.5rem;">
+  <button class="dem-btn fail"  onclick="action('FAILED')">SetEventStatus FAILED</button>
+  <button class="dem-btn pass"  onclick="action('PASSED')">SetEventStatus PASSED</button>
+  <button class="dem-btn clear" onclick="action('CLEAR')">Dem_ClearDTC ($04)</button>
+  <button class="dem-btn dcy"   onclick="action('DCY')">New drive cycle</button>
+  <button class="dem-btn"       onclick="action('AGING')">Aging cycle (+1)</button>
+  <button class="dem-btn"       onclick="action('RESET')" style="margin-left:auto;">Reset</button>
+</div>
+
+<div style="border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;margin-bottom:1.5rem;">
+  <div style="background:var(--color-background-secondary);padding:8px 14px;font-size:12px;font-weight:500;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);">Event log</div>
+  <div id="logBox" style="padding:10px 14px;font-size:12px;font-family:var(--font-mono);color:var(--color-text-secondary);max-height:130px;overflow-y:auto;display:flex;flex-direction:column;gap:3px;">
+    <span style="color:var(--color-text-tertiary);">— press an action to simulate —</span>
+  </div>
+</div>
+
+<div style="background:var(--color-background-secondary);border-radius:var(--border-radius-lg);padding:1rem 1.25rem;">
+  <div style="font-size:12px;font-weight:500;color:var(--color-text-secondary);margin-bottom:10px;">All 8 bits — ISO 14229-1 Table D.2 / AUTOSAR SWS_Dem</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px;">
+    <div style="padding:8px;border-radius:var(--border-radius-md);border:0.5px solid #A32D2D;background:#FCEBEB;color:#791F1F;"><strong>bit0 testFailed</strong><br>SET: FAILED qualified. CLEARED: PASSED or ClearDTC</div>
+    <div style="padding:8px;border-radius:var(--border-radius-md);border:0.5px solid #854F0B;background:#FAEEDA;color:#633806;"><strong>bit1 testFailedThisDCY</strong><br>SET: any FAILED this DCY. CLEARED: new DCY or ClearDTC</div>
+    <div style="padding:8px;border-radius:var(--border-radius-md);border:0.5px solid #0F6E56;background:#E1F5EE;color:#085041;"><strong>bit2 pendingDTC</strong><br>SET: testFailed set in current DCY. CLEARED: no fault in next DCY or ClearDTC</div>
+    <div style="padding:8px;border-radius:var(--border-radius-md);border:0.5px solid #185FA5;background:#E6F1FB;color:#0C447C;"><strong>bit3 confirmedDTC</strong><br>SET: fault DCY counter reaches threshold (3). CLEARED: ClearDTC only</div>
+    <div style="padding:8px;border-radius:var(--border-radius-md);border:0.5px solid #534AB7;background:#EEEDFE;color:#3C3489;"><strong>bit4 testNotCompletedThisDCY</strong><br>SET: new DCY (monitor not yet run). CLEARED: monitor completes</div>
+    <div style="padding:8px;border-radius:var(--border-radius-md);border:0.5px solid #5F5E5A;background:#F1EFE8;color:#444441;"><strong>bit5 testFailedSinceLastClear</strong><br>SET: any FAILED since last ClearDTC. CLEARED: ClearDTC only</div>
+    <div style="padding:8px;border-radius:var(--border-radius-md);border:0.5px solid #3B6D11;background:#EAF3DE;color:#27500A;"><strong>bit6 warningIndicatorRequested</strong><br>SET: confirmedDTC set (MIL on). CLEARED: ClearDTC or 3 fault-free DCYs</div>
+    <div style="padding:8px;border-radius:var(--border-radius-md);border:0.5px solid #993C1D;background:#FAECE7;color:#712B13;"><strong>bit7 testFailedSinceLastClear (aging)</strong><br>SET: confirmedDTC ageable. CLEARED: aging counter expires or ClearDTC</div>
+  </div>
+</div>
+
+<script>
+  var THRESH=3, AGING_THRESH=40;
+  var bits={b0:0,b1:0,b2:0,b3:0,b4:1,b5:0,b6:0,b7:0};
+  var faultDcyCount=0, agingCount=0, failedThisDCY=false, faultPrevDCY=false;
+
+  var meta=[
+    {key:'b0',label:'bit0\ntestFailed',                   c:['#FCEBEB','#A32D2D','#791F1F']},
+    {key:'b1',label:'bit1\ntestFailed\nThisDCY',          c:['#FAEEDA','#BA7517','#633806']},
+    {key:'b2',label:'bit2\npendingDTC',                   c:['#E1F5EE','#1D9E75','#085041']},
+    {key:'b3',label:'bit3\nconfirmedDTC',                 c:['#E6F1FB','#378ADD','#0C447C']},
+    {key:'b4',label:'bit4\ntestNotCompleted\nThisDCY',    c:['#EEEDFE','#7F77DD','#3C3489']},
+    {key:'b5',label:'bit5\ntestFailed\nSinceLastClear',   c:['#F1EFE8','#888780','#444441']},
+    {key:'b6',label:'bit6\nwarningIndicator\nRequested',  c:['#EAF3DE','#639922','#27500A']},
+    {key:'b7',label:'bit7\nagingCounter\nNotExpired',     c:['#FAECE7','#D85A30','#712B13']}
+  ];
+
+  function renderBits(){
+    var g=document.getElementById('bitGrid');
+    g.innerHTML='';
+    var byte=0;
+    var keys=['b0','b1','b2','b3','b4','b5','b6','b7'];
+    keys.forEach(function(k,i){ if(bits[k]) byte|=(1<<i); });
+    document.getElementById('hexByte').textContent='0x'+byte.toString(16).toUpperCase().padStart(2,'0');
+    meta.forEach(function(m){
+      var v=bits[m.key];
+      var cell=document.createElement('div');
+      cell.className='bit-cell';
+      cell.style.background=v?m.c[0]:'var(--color-background-secondary)';
+      cell.style.borderColor=v?m.c[1]:'var(--color-border-tertiary)';
+      var lines=m.label.split('\n');
+      cell.innerHTML='<div class="bit-val" style="color:'+(v?m.c[2]:'var(--color-text-tertiary)')+';">'+v+'</div>'+
+        lines.map(function(l,i){return '<div class="bit-name" style="'+(i===0?'font-weight:500;color:var(--color-text-secondary);':'')+'">'+l+'</div>';}).join('');
+      g.appendChild(cell);
+    });
+    renderDots();
+  }
+
+  function renderDots(){
+    var d=document.getElementById('dcyDots');
+    d.innerHTML='';
+    document.getElementById('dcyCounter').textContent=faultDcyCount+' / '+THRESH;
+    for(var i=0;i<THRESH;i++){
+      var dot=document.createElement('div');
+      dot.style.cssText='width:16px;height:16px;border-radius:50%;border:0.5px solid '+(i<faultDcyCount?'#A32D2D':'var(--color-border-tertiary)')+';background:'+(i<faultDcyCount?'#F09595':'var(--color-background-primary)')+';';
+      d.appendChild(dot);
+    }
+  }
+
+  function action(type){
+    var ch=[];
+
+    if(type==='FAILED'){
+      if(!bits.b0){bits.b0=1;ch.push('bit0 testFailed → 1');}
+      if(!bits.b1){bits.b1=1;ch.push('bit1 testFailedThisDCY → 1');}
+      if(!bits.b2){bits.b2=1;ch.push('bit2 pendingDTC → 1');}
+      if(bits.b4){bits.b4=0;ch.push('bit4 testNotCompletedThisDCY → 0');}
+      if(!bits.b5){bits.b5=1;ch.push('bit5 testFailedSinceLastClear → 1');}
+      failedThisDCY=true;
+      if(ch.length===0)ch.push('bits already set — no change');
+      addLog('SetEventStatus(FAILED)','#A32D2D',ch);
+    }
+
+    else if(type==='PASSED'){
+      if(bits.b0){bits.b0=0;ch.push('bit0 testFailed → 0');}
+      if(bits.b4){bits.b4=0;ch.push('bit4 testNotCompletedThisDCY → 0');}
+      if(ch.length===0)ch.push('no change — testFailed already 0');
+      addLog('SetEventStatus(PASSED)','#0F6E56',ch);
+    }
+
+    else if(type==='DCY'){
+      if(!bits.b4){
+        if(failedThisDCY){
+          faultDcyCount=Math.min(THRESH,faultDcyCount+1);
+          ch.push('fault DCY counter → '+faultDcyCount+' / '+THRESH);
+          if(faultDcyCount>=THRESH&&!bits.b3){
+            bits.b3=1;ch.push('bit3 confirmedDTC → 1 (threshold reached)');
+            bits.b6=1;ch.push('bit6 warningIndicatorRequested → 1 (MIL on)');
+            bits.b7=1;ch.push('bit7 agingCounterNotExpired → 1');
+            agingCount=0;
+          }
+          if(bits.b2)ch.push('bit2 pendingDTC stays 1 (fault this DCY)');
+        } else {
+          if(faultDcyCount>0){faultDcyCount=0;ch.push('fault DCY counter reset → 0 (no fault this DCY)');}
+          if(bits.b2){bits.b2=0;ch.push('bit2 pendingDTC → 0 (no fault this DCY)');}
+        }
+      } else {
+        ch.push('monitor did not run — counter unchanged');
+      }
+      if(bits.b1){bits.b1=0;ch.push('bit1 testFailedThisDCY → 0');}
+      bits.b4=1;ch.push('bit4 testNotCompletedThisDCY → 1');
+      faultPrevDCY=failedThisDCY;
+      failedThisDCY=false;
+      addLog('New drive cycle','#854F0B',ch);
+    }
+
+    else if(type==='AGING'){
+      if(bits.b3&&bits.b7&&!bits.b0){
+        agingCount++;
+        ch.push('aging counter → '+agingCount+' / '+AGING_THRESH);
+        if(agingCount>=AGING_THRESH){
+          bits.b3=0;ch.push('bit3 confirmedDTC → 0 (aging expired)');
+          bits.b6=0;ch.push('bit6 warningIndicatorRequested → 0');
+          bits.b7=0;ch.push('bit7 agingCounterNotExpired → 0');
+          agingCount=0;
+          ch.push('DTC removed from event memory');
+        }
+      } else {
+        ch.push('aging not applicable — need confirmedDTC=1 and testFailed=0');
+      }
+      addLog('Aging cycle (+1) — '+agingCount+'/'+AGING_THRESH,'#993C1D',ch);
+    }
+
+    else if(type==='CLEAR'){
+      Object.keys(bits).forEach(function(k){bits[k]=0;});
+      bits.b4=1;
+      faultDcyCount=0;agingCount=0;failedThisDCY=false;faultPrevDCY=false;
+      ch.push('all bits cleared');
+      ch.push('bit4 testNotCompletedThisDCY → 1');
+      ch.push('fault DCY counter → 0');
+      ch.push('aging counter → 0');
+      addLog('Dem_ClearDTC() / Mode $04','#185FA5',ch);
+    }
+
+    else if(type==='RESET'){
+      bits={b0:0,b1:0,b2:0,b3:0,b4:1,b5:0,b6:0,b7:0};
+      faultDcyCount=0;agingCount=0;failedThisDCY=false;faultPrevDCY=false;
+      document.getElementById('logBox').innerHTML='<span style="color:var(--color-text-tertiary);">— reset —</span>';
+      renderBits();return;
+    }
+
+    renderBits();
+  }
+
+  function addLog(title,color,changes){
+    var box=document.getElementById('logBox');
+    var wrap=document.createElement('div');
+    wrap.style.cssText='border-left:2px solid '+color+';padding-left:8px;margin-bottom:3px;';
+    var t=document.createElement('span');
+    t.style.cssText='color:'+color+';font-weight:500;';
+    t.textContent=title;
+    wrap.appendChild(t);
+    changes.forEach(function(c){
+      var el=document.createElement('div');
+      el.style.color='var(--color-text-secondary)';
+      el.textContent='  '+c;
+      wrap.appendChild(el);
+    });
+    box.insertBefore(wrap,box.firstChild);
+    if(box.children.length>10)box.removeChild(box.lastChild);
+  }
+
+  renderBits();
+</script>
